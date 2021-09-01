@@ -726,8 +726,12 @@ PathEntryFinder.find_spec = function(self, fullname){
     var tryall = hint === undefined
     if(tryall || hint == 'py'){
         // either py or undefined , try py code
-        modpaths = modpaths.concat([[base_path + ".py", "py", false],
-            [base_path + "/__init__.py", "py", true]])
+        for(var i = 0; i < $B.source_suffixes.length; i++) {
+            var source_suffix = $B.source_suffixes[i],
+                source_type = source_suffix.substr(1);
+            modpaths.push([base_path + source_suffix, source_type, false])
+            modpaths.push([base_path + "/__init__" + source_suffix, source_type, true])
+        }
     }
 
     for(var j = 0; notfound && j < modpaths.length; ++j){

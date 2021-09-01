@@ -11391,6 +11391,11 @@ var brython = $B.parser.brython = function(options){
     if(options.profile === undefined){options.profile = 0}
     $B.profile = options.profile
 
+    if(options.source_suffixes === undefined){
+        options.source_suffixes = [".py"]
+    }
+    $B.source_suffixes=options.source_suffixes
+
     // If a VFS is present, Brython normally stores a precompiled version
     // in an indexedDB database. Setting options.indexedDB to false disables
     // this feature (cf issue #927)
