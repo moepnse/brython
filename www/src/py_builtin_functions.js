@@ -244,7 +244,7 @@ function callable(obj) {
     return hasattr(obj, '__call__')
 }
 
-function chr(i) {
+function chr(i){
     check_nb_args('chr', 1, arguments)
     check_no_kw('chr', i)
 
@@ -1011,7 +1011,7 @@ $B.$getattr = function(obj, attr, _default){
 
     var klass = obj.__class__
 
-    var $test = false // attr == "__ceil__" // && obj === $B // "Point"
+    var $test = false // attr == "__closure__" // && obj === $B // "Point"
     if($test){console.log("$getattr", attr, obj, klass)}
 
     // Shortcut for classes without parents
@@ -1301,20 +1301,18 @@ function hasattr(obj,attr){
     }
 }
 
-var hash_cache = {}
+var hash_cache = {} // for strings
 function hash(obj){
     check_no_kw('hash', obj)
     check_nb_args('hash', 1, arguments)
 
-    if(obj.__hashvalue__ !== undefined){return obj.__hashvalue__}
-    if(isinstance(obj, _b_.bool)){return _b_.int.$factory(obj)}
-    if(isinstance(obj, _b_.int)){
-        if(obj.$brython_value === undefined){
-            return obj.valueOf()
-        }else{ // int subclass
-            return obj.__hashvalue__ = obj.$brython_value
-        }
+    if(obj.__hashvalue__ !== undefined){
+        return obj.__hashvalue__
     }
+    if(isinstance(obj, _b_.bool)){
+        return _b_.int.$factory(obj)
+    }
+
     if(obj.$is_class ||
             obj.__class__ === _b_.type ||
             obj.__class__ === $B.Function){
@@ -1334,6 +1332,7 @@ function hash(obj){
         throw _b_.TypeError.$factory("unhashable type: '" +
                 _b_.str.$factory($B.JSObj.$factory(obj)) + "'")
     }
+
     var hash_method = $B.$getattr(klass, '__hash__', _b_.None)
 
     if(hash_method === _b_.None){
@@ -1680,7 +1679,7 @@ function locals(){
     // The last item in __BRYTHON__.frames_stack is
     // [locals_name, locals_obj, globals_name, globals_obj]
     check_nb_args('locals', 0, arguments)
-    var res = $B.obj_dict($B.last($B.frames_stack)[1])
+    var res = $B.obj_dict($B.clone($B.last($B.frames_stack)[1]))
     res.$is_namespace = true
     delete res.$jsobj.__annotations__
     return res
@@ -1820,6 +1819,9 @@ var memoryview = $B.make_class('memoryview',
         }
     }
 )
+
+memoryview.$match_sequence_pattern = true, // for Pattern Matching (PEP 634)
+
 memoryview.__eq__ = function(self, other){
     if(other.__class__ !== memoryview){return false}
     return $B.$getattr(self.obj, '__eq__')(other.obj)
@@ -1853,6 +1855,14 @@ memoryview.__getitem__ = function(self, key){
 
 memoryview.__len__ = function(self){
     return len(self.obj) / self.itemsize
+}
+
+memoryview.__setitem__ = function(self, key, value){
+    try{
+        $B.$setitem(self.obj, key, value)
+    }catch(err){
+        throw _b_.TypeError.$factory("cannot modify read-only memory")
+    }
 }
 
 memoryview.cast = function(self, format){
@@ -2244,7 +2254,8 @@ $B.$setattr = function(obj, attr, value){
                 "supported for heap types or ModuleType subclasses")
             }else if(Array.isArray(value.__bases__)){
                 for(var i = 0; i < value.__bases__.length; i++){
-                    if(value.__bases__[i].__module__ == "builtins"){
+                    if(value.__bases__[i] !== _b_.object &&
+                            value.__bases__[i].__module__ == "builtins"){
                         error("__class__ assignment: '" + $B.class_name(obj) +
                             "' object layout differs from '" +
                             $B.class_name(value) + "'")
@@ -2609,6 +2620,17 @@ $$super.__getattribute__ = function(self, attr){
         attr + "'")
 }
 
+$$super.__init__ = function(cls){
+    if(cls === undefined){
+        throw _b_.TypeError.$factory("descriptor '__init__' of 'super' " +
+            "object needs an argument")
+    }
+    if(cls.__class__ !== $$super){
+        throw _b_.TypeError.$factory("descriptor '__init__' requires a" +
+            " 'super' object but received a '" + $B.class_name(cls) + "'")
+    }
+}
+
 $$super.__repr__ = function(self){
     $B.builtins_repr_check($$super, arguments) // in brython_builtins.js
     var res = "<super: <class '" + self.__thisclass__.$infos.__name__ + "'>"
@@ -2749,9 +2771,14 @@ $Reader.readline = function(self, size){
             return res
         }
     }else{
+        if(self.$counter == self.$content.length){
+            return ''
+        }
         var ix = self.$content.indexOf("\n", self.$counter)
         if(ix == -1){
-            return ''
+            var rest = self.$content.substr(self.$counter)
+            self.$counter = self.$content.length
+            return rest
         }else{
             var res = self.$content.substring(self.$counter, ix + 1)
             self.$counter = ix + 1
@@ -2871,13 +2898,11 @@ function $url_open(){
         // read the file content and return an object with file object methods
         var is_binary = mode.search('b') > -1
         if($B.file_cache.hasOwnProperty($.file)){
-            console.log('open cas 1')
             result.content = $B.file_cache[$.file] // string
             if(is_binary){
                 result.content = _b_.str.encode(content, 'utf-8')
             }
         }else if($B.files && $B.files.hasOwnProperty($.file)){
-            console.log('open cas 2')
             // Virtual file system created by
             // python -m brython --make_file_system
             $res = atob($B.files[$.file].content)
@@ -2926,7 +2951,7 @@ function $url_open(){
             // add fake query string to avoid caching
             var fake_qs = $B.$options.cache ? '' :
                               '?foo=' + (new Date().getTime())
-            req.open('GET', file + fake_qs, false)
+            req.open('GET', encodeURI(file + fake_qs), false)
             req.send()
         }else{
             throw _b_.FileNotFoundError.$factory(
@@ -3164,7 +3189,9 @@ $B.Function.__getattribute__ = function(self, attr){
             return self.$infos.__dict__.$string_dict[attr][0]
     }else if(attr == "__closure__"){
         var free_vars = self.$infos.__code__.co_freevars
-        if(free_vars.length == 0){return None}
+        if(free_vars.length == 0){
+            return None
+        }
         var cells = []
         for(var i = 0; i < free_vars.length; i++){
             try{

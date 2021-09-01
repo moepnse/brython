@@ -390,6 +390,12 @@ VFSLoader.exec_module = function(self, modobj){
             // Initialise $B.imported[parent]
             var mod_js = $B.precompiled[parent],
                 is_package = modobj.$is_package
+            if(mod_js === undefined){
+                // Might be the case if the code in package __init__.py
+                // imports a submodule : the parent of the submodule is not
+                // yet in precompiled
+                continue
+            }
             if(Array.isArray(mod_js)){mod_js = mod_js[0]}
             var mod = $B.imported[parent] = Module.$factory(parent,
                 undefined, is_package)
@@ -410,6 +416,7 @@ VFSLoader.exec_module = function(self, modobj){
                     mod)
             }catch(err){
                 if($B.debug > 1){
+                    console.log('error in module', mod)
                     console.log(err)
                     for(var k in err){console.log(k, err[k])}
                     console.log(Object.keys($B.imported))
@@ -437,6 +444,7 @@ VFSLoader.exec_module = function(self, modobj){
             console.log("run Python code from VFS", mod_name)
         }
         var record = run_py(module_contents, modobj.__path__, modobj)
+        record.imports = imports.join(',')
         record.is_package = modobj.$is_package
         record.timestamp = $B.timestamp
         record.source_ts = timestamp
@@ -722,7 +730,8 @@ PathEntryFinder.find_spec = function(self, fullname){
         notfound = true,
         hint = self.hint,
         base_path = self.path_entry + fullname.match(/[^.]+$/g)[0],
-        modpaths = []
+        modpaths = [],
+        py_ext = $B.$options.python_extension // defaults to .py (issue #1748)
     var tryall = hint === undefined
     if(tryall || hint == 'py'){
         // either py or undefined , try py code
@@ -732,6 +741,8 @@ PathEntryFinder.find_spec = function(self, fullname){
             modpaths.push([base_path + source_suffix, source_type, false])
             modpaths.push([base_path + "/__init__" + source_suffix, source_type, true])
         }
+        modpaths = modpaths.concat([[base_path + py_ext, "py", false],
+            [base_path + "/__init__" + py_ext, "py", true]])
     }
 
     for(var j = 0; notfound && j < modpaths.length; ++j){
@@ -1244,13 +1255,7 @@ $B.$import = function(mod_name, fromlist, aliases, locals){
                                 current_frame[3].src, undefined, line_num)
                         }
                         if($err3.$py_error){
-                            var errname = $err3.__class__.$infos.__name__
-                            if($err3.__class__ !== _b_.ImportError &&
-                                    $err3.__class__ !== _b_.ModuleNotFoundError){
-                                $B.handle_error($err3)
-                            }
-                            throw _b_.ImportError.$factory(
-                                "cannot import name '" + name + "'")
+                            throw $err3
                         }
                         if($B.debug > 1){
                             console.log($err3)

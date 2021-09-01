@@ -29,6 +29,7 @@ var list = {
     },
     $is_class: true,
     $native: true,
+    $match_sequence_pattern: true, // for Pattern Matching (PEP 634)
     __dir__: object.__dir__
 }
 
@@ -160,20 +161,28 @@ list.__getitem__ = function(self, key){
 }
 
 list.$getitem = function(self, key){
-    var factory = (self.__class__ || $B.get_class(self)).$factory
+    var klass = (self.__class__ || $B.get_class(self))
+    var factory = function(list_res){
+        list_res.__class__ = klass
+        return list_res
+    }
 
     var int_key
-    try {
+    try{
       int_key = $B.PyNumber_Index(key)
-    } catch(err) {
+    }catch(err){
 
     }
 
-    if (int_key !== undefined) {
+    if(int_key !== undefined){
         var items = self.valueOf(),
             pos = int_key
-        if(int_key < 0){pos = items.length + pos}
-        if(pos >= 0 && pos < items.length){return items[pos]}
+        if(int_key < 0){
+            pos = items.length + pos
+        }
+        if(pos >= 0 && pos < items.length){
+            return items[pos]
+        }
 
         throw _b_.IndexError.$factory($B.class_name(self) +
             " index out of range")
@@ -282,15 +291,26 @@ list.__imul__ = function() {
 }
 
 list.__init__ = function(self, arg){
-    var len_func = $B.$call(getattr(self, "__len__")),
-        pop_func = getattr(self, "pop", $N)
+    var $ = $B.args('__init__', 1, {self: null}, ['self'], arguments, {},
+            'args', null),
+        self = $.self,
+        args = $.args
+    if(args.length > 1){
+        throw _b_.TypeError.$factory('expected at most 1 argument, got ' +
+            args.length)
+    }
+    var arg = args[0]
+    var len_func = $B.$call($B.$getattr(self, "__len__")),
+        pop_func = $B.$getattr(self, "pop", $N)
     if(pop_func !== $N){
         pop_func = $B.$call(pop_func)
         while(len_func()){pop_func()}
     }
-    if(arg === undefined){return $N}
+    if(arg === undefined){
+        return $N
+    }
     var arg = $B.$iter(arg),
-        next_func = $B.$call(getattr(arg, "__next__")),
+        next_func = $B.$call($B.$getattr(arg, "__next__")),
         pos = len_func()
     while(1){
         try{
@@ -895,7 +915,8 @@ var tuple = {
         __name__: "tuple"
     },
     $is_class: true,
-    $native: true
+    $native: true,
+    $match_sequence_pattern: true, // for Pattern Matching (PEP 634)
 }
 
 var tuple_iterator = $B.make_iterator_class("tuple_iterator")
@@ -1018,5 +1039,6 @@ _b_.tuple = tuple
 
 // set object.__bases__ to an empty tuple
 _b_.object.__bases__ = tuple.$factory()
+_b_.type.__bases__ = $B.fast_tuple([_b_.object])
 
 })(__BRYTHON__)

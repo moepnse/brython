@@ -177,11 +177,12 @@ int.__divmod__ = function(self, other){
 
 int.__eq__ = function(self, other){
     // compare object "self" to class "int"
-    if(other === undefined){return self === int}
     if(_b_.isinstance(other, int)){
         return self.valueOf() == int_value(other).valueOf()
     }
-    if(_b_.isinstance(other, _b_.float)){return self.valueOf() == other.valueOf()}
+    if(_b_.isinstance(other, _b_.float)){
+        return self.valueOf() == other.valueOf()
+    }
     if(_b_.isinstance(other, _b_.complex)){
         if(other.$imag != 0){return False}
         return self.valueOf() == other.$real
@@ -269,10 +270,20 @@ int.__floordiv__ = function(self, other){
 }
 
 int.__hash__ = function(self){
-   if(self === undefined){
-      return int.__hashvalue__ || $B.$py_next_hash--  // for hash of int type (not instance of int)
-   }
-   return self.valueOf()
+    if(self.$brython_value){
+        // int subclass
+        var hash_method = $B.$getattr(self.__class__, '__hash__')
+        if(hash_method === int.__hash__){
+            if(typeof self.$brython_value == "number"){
+                return self.$brython_value
+            }else{ // long int
+                return $B.long_int.__hash__(self.$brython_value)
+            }
+        }else{
+            return hash_method(self)
+        }
+    }
+    return self.valueOf()
 }
 
 //int.__ior__ = function(self,other){return self | other} // bitwise OR

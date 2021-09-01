@@ -171,10 +171,14 @@ $B.args = function($fname, argcount, slots, var_names, args, $dobj,
     var missing = []
     for(var attr in slots){
         if(slots[attr] === null){
-            if($dobj[attr] !== undefined){slots[attr] = $dobj[attr]}
-            else{missing.push("'" + attr + "'")}
+            if($dobj[attr] !== undefined){
+                slots[attr] = $dobj[attr]
+            }else{
+                missing.push("'" + $B.from_alias(attr) + "'")
+            }
         }
     }
+
 
     if(missing.length > 0){
 
@@ -203,7 +207,7 @@ $B.wrong_nb_args = function(name, received, expected, positional){
         var missing = expected - received
         throw _b_.TypeError.$factory(name + "() missing " + missing +
             " positional argument" + (missing > 1 ? "s" : "") + ": " +
-            positional.slice(received))
+            positional.slice(received).map(x => `'${$B.from_alias(x)}'`))
     }else{
         throw _b_.TypeError.$factory(name + "() takes " + expected +
             " positional argument" + (expected > 1 ? "s" : "") +
@@ -465,6 +469,25 @@ $B.$local_search = function(name){
     }
 }
 
+$B.get_method_class = function(ns, qualname){
+    // Used to set the cell __name__ in a method. ns is the namespace
+    // and qualname is the qualified name of the class
+    // Generally, for qualname = "A.B", the result is just ns.A.B
+    // In some cases, ns.A might not yet be defined (cf. issue #1740).
+    // In this case, a fake class is returned with the same qualname.
+    var refs = qualname.split('.'),
+        klass = ns
+    while(refs.length > 0){
+        var ref = refs.shift()
+        if(klass[ref] === undefined){
+            var fake_class = $B.make_class(qualname)
+            return fake_class
+        }
+        klass = klass[ref]
+    }
+    return klass
+}
+
 $B.$check_def = function(name, value){
     // Check if value is not undefined
     if(value !== undefined){
@@ -579,7 +602,7 @@ $B.list_slice = function(obj, start, stop){
     }
     if(stop === null){return obj.slice(start)}
     stop = $B.$GetInt(stop)
-    if(stop < 0){stop = Math.max(0, stop + obj.length)}
+    if(stop < 0){stop += obj.length}
     return obj.slice(start, stop)
 }
 
@@ -619,18 +642,19 @@ $B.$getitem = function(obj, item){
     var is_list = Array.isArray(obj) && obj.__class__ === _b_.list,
         is_dict = obj.__class__ === _b_.dict && ! obj.$jsobj
     if(typeof item == "number"){
-        if(is_list ||
-                (typeof obj == "string" &&
-                 ! $B.has_surrogate(obj))){
+        if(is_list || typeof obj == "string"){
             item = item >=0 ? item : obj.length + item
-            if(obj[item] !== undefined){return obj[item]}
-            else{index_error(obj)}
+            if(obj[item] !== undefined){
+                return obj[item]
+            }else{
+                index_error(obj)
+            }
         }else if(is_dict){
             if(obj.$numeric_dict[item] !== undefined){
                 return obj.$numeric_dict[item][0]
             }
         }
-    }else if(typeof item == "string" && is_dict){
+    }else if(typeof item.valueOf() == "string" && is_dict){
         var res = obj.$string_dict[item]
         if(res !== undefined){
             return res[0]
@@ -674,7 +698,7 @@ $B.$getitem = function(obj, item){
 
 $B.getitem_slice = function(obj, slice){
     var res
-    if(Array.isArray(obj)){
+    if(Array.isArray(obj) && obj.__class__ === _b_.list){
         if(slice.start === _b_.None && slice.stop === _b_.None){
             if(slice.step === _b_.None || slice.step == 1){
                 res = obj.slice()
@@ -720,14 +744,19 @@ $B.set_list_key = function(obj, key, value){
 }
 
 $B.set_list_slice = function(obj, start, stop, value){
-    if(start === null){start = 0}
-    else{
+    if(start === null){
+        start = 0
+    }else{
         start = $B.$GetInt(start)
         if(start < 0){start = Math.max(0, start + obj.length)}
     }
-    if(stop === null){stop = obj.length}
+    if(stop === null){
+        stop = obj.length
+    }
     stop = $B.$GetInt(stop)
-    if(stop < 0){stop = Math.max(0, stop + obj.length)}
+    if(stop < 0){
+        stop = Math.max(0, stop + obj.length)
+    }
     var res = _b_.list.$factory(value)
     obj.splice.apply(obj,[start, stop - start].concat(res))
 }
@@ -801,7 +830,7 @@ $B.$setitem = function(obj, item, value){
 
 // item deletion
 $B.$delitem = function(obj, item){
-    if(Array.isArray(obj) && obj.__class__ === undefined &&
+    if(Array.isArray(obj) && obj.__class__ === _b_.list &&
             typeof item == "number" &&
             !_b_.isinstance(obj, _b_.tuple)){
         if(item < 0){item += obj.length}
@@ -826,22 +855,32 @@ $B.$delitem = function(obj, item){
 }
 
 $B.delitem_slice = function(obj, slice){
-    if(Array.isArray(obj)){
+    if(Array.isArray(obj) && obj.__class__ === _b_.list){
         if(slice.start === _b_.None && slice.stop === _b_.None){
             if(slice.step === _b_.None || slice.step == 1 ||
                     slice.step == -1){
                 while(obj.length > 0){
                     obj.pop()
                 }
+                return _b_.None
             }
         }else if(slice.step === _b_.None){
-            if(slice.start === _b_.None){slice.start = 0}
-            if(slice.stop === _b_.None){slice.stop = obj.length}
+            if(slice.start === _b_.None){
+                slice.start = 0
+            }
+            if(slice.stop === _b_.None){
+                slice.stop = obj.length
+            }
             if(typeof slice.start == "number" &&
                     typeof slice.stop == "number"){
-                if(slice.start < 0){slice.start += obj.length}
-                if(slice.stop < 0){slice.stop += obj.length}
+                if(slice.start < 0){
+                    slice.start += obj.length
+                }
+                if(slice.stop < 0){
+                    slice.stop += obj.length
+                }
                 obj.splice(slice.start, slice.stop - slice.start)
+                return _b_.None
             }
         }
     }
@@ -1614,6 +1653,9 @@ var method2comp = {"__lt__": "<", "__le__": "<=", "__gt__": ">",
     "__ge__": ">="}
 
 $B.rich_comp = function(op, x, y){
+    if(x === undefined){
+        throw _b_.RuntimeError.$factory('error in rich comp')
+    }
     var x1 = x.valueOf(),
         y1 = y.valueOf()
     if(typeof x1 == "number" && typeof y1 == "number" &&
@@ -1633,8 +1675,7 @@ $B.rich_comp = function(op, x, y){
                 return x1 > y1
         }
     }
-    var res,
-        rev_op
+    var res
 
     if(x.$is_class || x.$factory) {
         if(op == "__eq__"){
@@ -1648,6 +1689,8 @@ $B.rich_comp = function(op, x, y){
         }
     }
 
+    var x_class_op = $B.$call($B.$getattr(x.__class__ || $B.get_class(x), op)),
+        rev_op = reversed_op[op] || op
     if(x.__class__ && y.__class__){
         // cf issue #600 and
         // https://docs.python.org/3/reference/datamodel.html :
@@ -1656,22 +1699,30 @@ $B.rich_comp = function(op, x, y){
         // reflected method of the right operand has priority, otherwise the
         // left operand’s method has priority."
         if(y.__class__.__mro__.indexOf(x.__class__) > -1){
-            rev_op = reversed_op[op] || op
             var rev_func = $B.$getattr(y, rev_op)
             res = $B.$call($B.$getattr(y, rev_op))(x)
-            if(res !== _b_.NotImplemented){return res}
+            if(res !== _b_.NotImplemented){
+                return res
+            }
         }
     }
 
-    res = $B.$call($B.$getattr(x, op))(y)
+    res = x_class_op(x, y)
     if(res !== _b_.NotImplemented){return res}
-    rev_op = reversed_op[op] || op
-    res = $B.$call($B.$getattr(y, rev_op))(x)
-    if(res !== _b_.NotImplemented ){return res}
+    var y_class_op = $B.$call($B.$getattr(y.__class__ || $B.get_class(y),
+        rev_op))
+    res = y_class_op(y, x)
+    if(res !== _b_.NotImplemented ){
+        return res
+    }
+
     // If both operands return NotImplemented, return False if the operand is
     // __eq__, True if it is __ne__, raise TypeError otherwise
-    if(op == "__eq__"){return _b_.False}
-    else if(op == "__ne__"){return _b_.True}
+    if(op == "__eq__"){
+        return _b_.False
+    }else if(op == "__ne__"){
+        return _b_.True
+    }
 
     throw _b_.TypeError.$factory("'" + method2comp[op] +
         "' not supported between instances of '" + $B.class_name(x) +
@@ -1733,9 +1784,12 @@ $B.rich_op = function(op, x, y){
     }
     res = method(y)
     if(res === _b_.NotImplemented){
-        res = $B.$call($B.$getattr(y, "__r" + op + "__"))(x)
-        if(res !== _b_.NotImplemented){
-            return res
+        var reflected = $B.$getattr(y, "__r" + op + "__", null)
+        if(reflected !== null){
+            res = $B.$call(reflected)(x)
+            if(res !== _b_.NotImplemented){
+                return res
+            }
         }
         throw _b_.TypeError.$factory("'" + (opname2opsign[op] || op) +
             "' not supported between instances of '" + $B.class_name(x) +

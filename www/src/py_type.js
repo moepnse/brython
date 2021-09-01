@@ -5,6 +5,7 @@ var _b_ = $B.builtins
 // generic code for class constructor
 $B.$class_constructor = function(class_name, class_obj, bases,
         parents_names, kwargs){
+
     bases = bases || []
     var metaclass
 
@@ -185,6 +186,8 @@ $B.$class_constructor = function(class_name, class_obj, bases,
                 }else{
                     non_abstract_methods[attr] = true
                 }
+            }else{
+                non_abstract_methods[attr] = true
             }
         }
     }
@@ -218,7 +221,8 @@ $B.$class_constructor = function(class_name, class_obj, bases,
 
     // Apply method __new__ of metaclass to create the class object
     var meta_new = _b_.type.__getattribute__(metaclass, "__new__")
-    var kls = meta_new(metaclass, class_name, bases, cl_dict)
+    var kls = meta_new(metaclass, class_name, bases, cl_dict,
+        {$nat: 'kw', kw: extra_kwargs})
     kls.__module__ = module
     kls.$infos = {
         __module__: module,
@@ -226,6 +230,11 @@ $B.$class_constructor = function(class_name, class_obj, bases,
         __qualname__: class_obj.$qualname
     }
     kls.$subclasses = []
+
+
+    if(kls.__bases__ === undefined || kls.__bases__.length == 0){
+        kls.__bases__ = $B.fast_tuple([_b_.object])
+    }
 
     // Set attribute "$class" of functions defined in the class. Used in
     // py_builtin_functions / Function.__setattr__ to reset the function
@@ -248,9 +257,6 @@ $B.$class_constructor = function(class_name, class_obj, bases,
         bases[i].$subclasses  = bases[i].$subclasses || []
         bases[i].$subclasses.push(kls)
     }
-    var sup = _b_.$$super.$factory(kls, kls)
-    var init_subclass = _b_.$$super.__getattribute__(sup, "__init_subclass__")
-    init_subclass({$nat: "kw", kw: extra_kwargs})
 
     if(!is_instanciable){
         function nofactory(){
@@ -267,13 +273,17 @@ $B.$class_constructor = function(class_name, class_obj, bases,
 
 var type = $B.make_class("type",
     function(obj, bases, cl_dict){
-        if(arguments.length == 1){
+        var len = arguments.length
+        if(len == 1){
             if(obj === undefined){
                 return $B.UndefinedClass
             }
             return obj.__class__ || $B.get_class(obj)
+        }else if(len == 3){
+            return type.__new__(type, obj, bases, cl_dict)
+        }else{
+            throw _b_.TypeError.$factory('type() takes 1 or 3 arguments')
         }
-        return type.__new__(type, obj, bases, cl_dict)
     }
 )
 
@@ -331,10 +341,10 @@ type.__format__ = function(klass, fmt_spec){
             if(res === undefined){res = $B.empty_dict()}
             return res
         case "__bases__":
-            var res = klass.__bases__ || _b_.tuple.$factory()
+            var res = klass.__bases__ // || _b_.tuple.$factory()
             res.__class__ = _b_.tuple
             if(res.length == 0){
-                res.push(_b_.object)
+                // res.push(_b_.object)
             }
             return res
         case "__class__":
@@ -358,7 +368,7 @@ type.__format__ = function(klass, fmt_spec){
                 function(key){delete klass[key]})
     }
     var res = klass[attr]
-    var $test = false // attr == "__hash__" // && klass.$infos.__name__ == "generator"
+    var $test = false // attr == "__init__" // && klass.$infos.__name__ == "generator"
     if($test){
         console.log("attr", attr, "of", klass, res, res + "")
     }
@@ -506,7 +516,10 @@ type.__hash__ = function(cls){
 }
 
 type.__init__ = function(){
-    // Returns nothing
+    if(arguments.length == 0){
+        throw _b_.TypeError.$factory("descriptor '__init__' of 'type' " +
+            "object needs an argument")
+    }
 }
 
 type.__init_subclass__ = function(){
@@ -553,13 +566,17 @@ type.__name__ = {
 }
 
 
-type.__new__ = function(meta, name, bases, cl_dict){
+type.__new__ = function(meta, name, bases, cl_dict, extra_kwargs){
     // Return a new type object. This is essentially a dynamic form of the
     // class statement. The name string is the class name and becomes the
     // __name__ attribute; the bases tuple itemizes the base classes and
     // becomes the __bases__ attribute; and the dict dictionary is the
     // namespace containing definitions for class body and becomes the
     // __dict__ attribute
+
+    // arguments passed as keywords in class defintion
+    extra_kwargs = extra_kwargs === undefined ? {$nat: 'kw', kw: {}} :
+        extra_kwargs
 
     // Create the class dictionary
     var module = cl_dict.$string_dict.__module__
@@ -613,6 +630,10 @@ type.__new__ = function(meta, name, bases, cl_dict){
             }
         }
     }
+
+    var sup = _b_.$$super.$factory(class_dict, class_dict)
+    var init_subclass = _b_.$$super.__getattribute__(sup, "__init_subclass__")
+    init_subclass(extra_kwargs)
 
     return class_dict
 }
@@ -670,6 +691,10 @@ type.mro = function(cls){
     // method resolution order
     // copied from http://code.activestate.com/recipes/577748-calculate-the-mro-of-a-class/
     // by Steve d'Aprano
+    if(cls === undefined){
+        throw _b_.TypeError.$factory(
+            'unbound method type.mro() needs an argument')
+    }
     var bases = cls.__bases__,
         seqs = [],
         pos1 = 0
@@ -699,10 +724,6 @@ type.mro = function(cls){
             bmro[pos++] = _tmp[k]
         }
         seqs[pos1++] = bmro
-    }
-
-    if(bases.indexOf(_b_.object) == -1){
-        bases = bases.concat(_b_.tuple.$factory([_b_.object]))
     }
 
     seqs[pos1++] = bases.slice()

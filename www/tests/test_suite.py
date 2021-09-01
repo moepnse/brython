@@ -741,4 +741,28 @@ try:
 except NameError:
     pass
 
+# issue 1718 (tabulations)
+characters = {
+    "amber": {
+        'ascension': {
+            'element_1': 'agnidus_agate',
+        },
+        'element': 'pyro'
+    }
+}
+
+# issue 1721
+def f():
+    y = g(0 <= x <= 1)
+    return y
+
+def g(x):
+  return x
+
+x = 0.5
+assert f()
+
+x = 2
+assert not f()
+
 print('passed all tests...')

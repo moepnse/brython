@@ -171,7 +171,8 @@ var dict = {
         __name__: "dict"
     },
     $is_class: true,
-    $native: true
+    $native: true,
+    $match_mapping_pattern: true // for pattern matching (PEP 634)
 }
 
 dict.$to_obj = function(d){
@@ -276,12 +277,13 @@ dict.__class_getitem__ = function(cls, item){
 }
 
 dict.__contains__ = function(){
-
     var $ = $B.args("__contains__", 2, {self: null, key: null},
         ["self", "key"], arguments, {}, null, null),
         self = $.self,
         key = $.key
-    if(self.$is_namespace){key = $B.to_alias(key)} // issue 1244
+    if(self.$is_namespace){ // issue 1244
+        key = $B.to_alias(key)
+    }
 
     if(self.$jsobj){
         return self.$jsobj[key] !== undefined
@@ -296,9 +298,13 @@ dict.__contains__ = function(){
 
     var hash = _b_.hash(key)
     if(self.$str_hash[hash] !== undefined &&
-        $B.rich_comp("__eq__", key, self.$str_hash[hash])){return true}
+            $B.rich_comp("__eq__", key, self.$str_hash[hash])){
+        return true
+    }
     if(self.$numeric_dict[hash] !== undefined &&
-        $B.rich_comp("__eq__", key, hash)){return true}
+            $B.rich_comp("__eq__", key, hash)){
+        return true
+    }
     return rank(self, hash, key) > -1
 }
 
@@ -433,10 +439,8 @@ dict.__getitem__ = function(){
     return dict.$getitem(self, arg)
 }
 
-$B.string_count = 0
-$B.num_count = 0
 dict.$getitem = function(self, arg, ignore_missing){
-    // ignore_missing is only set in dict.setdefault
+    // ignore_missing is set in dict.get and dict.setdefault
     if(self.$jsobj){
         if(self.$jsobj[arg] === undefined){
             if(self.$jsobj.hasOwnProperty(arg)){
@@ -451,13 +455,11 @@ dict.$getitem = function(self, arg, ignore_missing){
         case "string":
             var x = self.$string_dict[arg]
             if(x !== undefined){
-                $B.string_count++
                 return x[0]
             }
             break
         case "number":
             if(self.$numeric_dict[arg] !== undefined){
-                $B.num_count++
                 return self.$numeric_dict[arg][0]
             }
             break
@@ -538,8 +540,9 @@ function init_from_list(self, args){
 }
 
 dict.__init__ = function(self, first, second){
-    var $
-    if(first === undefined){return $N}
+    if(first === undefined){
+        return $N
+    }
     if(second === undefined){
         if(first.$nat != 'kw' && $B.get_class(first) === $B.JSObj){
             for(var key in first){
@@ -558,7 +561,7 @@ dict.__init__ = function(self, first, second){
         }
     }
 
-    $ = $ || $B.args("dict", 1, {self:null}, ["self"],
+    var $ = $B.args("dict", 1, {self:null}, ["self"],
         arguments, {}, "first", "second")
     var args = $.first
     if(args.length > 1){
@@ -779,6 +782,9 @@ dict.$setitem = function(self, key, value, $hash){
         }
         return $N
     }
+    if(key instanceof String){
+        key = key.valueOf()
+    }
 
     switch(typeof key){
         case "string":
@@ -942,8 +948,10 @@ dict.get = function(){
     var $ = $B.args("get", 3, {self: null, key: null, _default: null},
         ["self", "key", "_default"], arguments, {_default: $N}, null, null)
 
-    try{return dict.__getitem__($.self, $.key)}
-    catch(err){
+    try{
+        // call $getitem with ignore_missign set to true
+        return dict.$getitem($.self, $.key, true)
+    }catch(err){
         if(_b_.isinstance(err, _b_.KeyError)){return $._default}
         else{throw err}
     }
@@ -1178,6 +1186,8 @@ var mappingproxy = $B.mappingproxy = $B.make_class("mappingproxy",
         return res
     }
 )
+
+mappingproxy.$match_mapping_pattern = true // for pattern matching (PEP 634)
 
 mappingproxy.__setitem__ = function(){
     throw _b_.TypeError.$factory("'mappingproxy' object does not support " +
