@@ -120,29 +120,6 @@ assert C.foo.abc == 1
 assert C.foo.xyz == "haha"
 assert C.foo.booh == 42
 
-# issue 118
-class A:
-
-    def toString(self):
-        return "whatever"
-
-assert A().toString() == "whatever"
-
-# issue 126
-class MyType(type):
-
-    def __getattr__(cls, attr):
-        return "whatever"
-
-class MyParent(metaclass=MyType):
-    pass
-
-class MyClass(MyParent):
-    pass
-
-assert MyClass.spam == "whatever"
-assert MyParent.spam == "whatever"
-
 # issue 121
 def recur(change_namespace=0):
     if change_namespace:
@@ -191,29 +168,6 @@ x = 7
 codeobj = compile("x + 4", "<example>", "eval")
 assert eval(codeobj) == 11
 
-# issue 154
-class MyMetaClass(type):
-
-    def __str__(cls):
-        return "Hello"
-
-class MyClass(metaclass=MyMetaClass):
-    pass
-
-assert str(MyClass) == "Hello"
-
-# issue 155
-class MyMetaClass(type):
-    pass
-
-class MyClass(metaclass=MyMetaClass):
-    pass
-
-MyOtherClass = MyMetaClass("DirectlyCreatedClass", (), {})
-
-assert isinstance(MyClass, MyMetaClass), type(MyClass)
-assert isinstance(MyOtherClass, MyMetaClass), type(MyOtherClass)
-
 # traceback objects
 import types
 
@@ -246,16 +200,6 @@ def f():
     return g()
 
 assert f() == 2
-
-# setting __class__
-class A:pass
-class B:
-    x = 1
-
-a = A()
-assert not hasattr(a, 'x')
-a.__class__ = B
-assert a.x == 1
 
 # hashable objects
 class X:
@@ -3001,6 +2945,66 @@ assertRaises(SyntaxError, exec,
 '''for i in range(0):
     if True:
         f() += 1''')
+
+# issue 1767
+assertRaises(TypeError, chr, '')
+assertRaises(TypeError, chr, 'a')
+
+# issue 1814
+er = IndexError('hello')
+assert str(er) == 'hello'
+assert repr(er) == "IndexError('hello')"
+er = IndexError()
+assert str(er) == ''
+assert repr(er) == 'IndexError()'
+
+# issue 1812
+assertRaises(ValueError, exec,
+    "list(zip(range(3), ['fee', 'fi', 'fo', 'fum'], strict=True))")
+assertRaises(ValueError, exec,
+    "list(zip(range(5), ['fee', 'fi', 'fo', 'fum'], strict=True))")
+
+# issue 1816
+assertRaises(SyntaxError, exec, '@x = 123')
+
+# issue 1821
+class MyRepr:
+    def __init__(self):
+        self.__repr__ = lambda: "obj"
+    def __repr__(self):
+        return "class"
+my_repr = MyRepr()
+assert str(my_repr.__repr__()) == 'obj'
+assert str(my_repr) == 'class'
+assert str(MyRepr.__repr__(my_repr)) == 'class'
+assert str(MyRepr().__repr__()) == 'obj'
+
+# issue 1826
+assertRaises(SyntaxError, exec, """x, if y > 4:
+    pass""")
+assertRaises(SyntaxError, exec, """async def f():
+    await x = 1""")
+
+# issue 1827
+class Vector2:
+
+    def __init__(self, a, b):
+        self.x, self.y = a, b
+
+    def clone(self):
+        return Vector2(self.x, self.y)
+
+    def __imul__(self, k):
+        res = self.clone()
+        res.x *= k
+        res.y *= k
+        return res
+
+vector = Vector2(1.5, 3.7)
+
+vector *= 25.7
+
+assert (vector.x, vector.y) == (38.55, 95.09)
 
 # ==========================================
 # Finally, report that all tests have passed

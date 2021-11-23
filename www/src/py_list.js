@@ -8,8 +8,7 @@ var _b_ = $B.builtins,
 
 function check_not_tuple(self, attr){
     if(self.__class__ === tuple){
-        throw _b_.AttributeError.$factory(
-            "'tuple' object has no attribute '" + attr +"'")
+        throw $B.attr_error(attr, self)
     }
 }
 
@@ -230,7 +229,7 @@ list.__ge__ = function(self, other){
         if(i >= other.length){return true}
         if($B.rich_comp("__eq__", self[i], other[i])){i++}
         else{
-            res = getattr(self[i], "__ge__")(other[i])
+            res = $B.$getattr(self[i], "__ge__")(other[i])
             if(res === _b_.NotImplemented){
                 throw _b_.TypeError.$factory("unorderable types: " +
                     $B.class_name(self[i])  + "() >= " +
@@ -251,7 +250,7 @@ list.__gt__ = function(self, other){
         if(i >= other.length){return true}
         if($B.rich_comp("__eq__", self[i], other[i])){i++}
         else{
-            res = getattr(self[i], "__gt__")(other[i])
+            res = $B.$getattr(self[i], "__gt__")(other[i])
             if(res === _b_.NotImplemented){
                 throw _b_.TypeError.$factory("unorderable types: " +
                     $B.class_name(self[i]) + "() > " +
@@ -355,7 +354,7 @@ list.__lt__ = function(self, other){
         if($B.rich_comp("__eq__", self[i], other[i])){
             i++
         }else{
-            res = getattr(self[i], "__lt__")(other[i])
+            res = $B.$getattr(self[i], "__lt__")(other[i])
             if(res === _b_.NotImplemented){
                 throw _b_.TypeError.$factory("unorderable types: " +
                     $B.class_name(self[i])  + "() >= " +
@@ -652,7 +651,7 @@ function $partition(arg, array, begin, end, pivot)
             }
         }else{
             for(var ix = begin; ix < end - 1; ++ix) {
-                if(getattr(array[ix], "__le__")(piv)){
+                if($B.$getattr(array[ix], "__le__")(piv)){
                     array = swap(array, store, ix)
                     ++store
                 }
@@ -667,7 +666,7 @@ function $partition(arg, array, begin, end, pivot)
             if(array.length !== len){
                 throw _b_.ValueError.$factory("list modified during sort")
             }
-            if(getattr(x, "__le__")(arg(piv))){
+            if($B.$getattr(x, "__le__")(arg(piv))){
                 array = swap(array, store, ix)
                 ++store
             }
@@ -714,7 +713,7 @@ list.sort = function(self){
     var func = $N,
         reverse = false,
         kw_args = $.kw,
-        keys = _b_.list.$factory(_b_.dict.$$keys(kw_args))
+        keys = _b_.list.$factory(_b_.dict.keys(kw_args))
 
     for(var i = 0; i < keys.length; i++){
         if(keys[i] == "key"){
@@ -750,7 +749,7 @@ list.sort = function(self){
         if(func === $N){
             if(reverse){
                 cmp = function(b, a) {
-                    res = getattr(a, "__lt__")(b)
+                    res = $B.$getattr(a, "__lt__")(b)
                     if(res === _b_.NotImplemented){
                         throw _b_.TypeError.$factory("unorderable types: " +
                             $B.class_name(b) + "() < " +
@@ -764,7 +763,7 @@ list.sort = function(self){
                 }
             }else{
                 cmp = function(a, b){
-                    res = getattr(a, "__lt__")(b)
+                    res = $B.$getattr(a, "__lt__")(b)
                     if(res === _b_.NotImplemented){
                         throw _b_.TypeError.$factory("unorderable types: " +
                             $B.class_name(a) + "() < " +
@@ -782,7 +781,7 @@ list.sort = function(self){
                 cmp = function(b, a) {
                     var _a = func(a),
                         _b = func(b)
-                    res = getattr(_a, "__lt__")(_b)
+                    res = $B.$getattr(_a, "__lt__")(_b)
                     if(res === _b_.NotImplemented){
                         throw _b_.TypeError.$factory("unorderable types: " +
                             $B.class_name(b) + "() < " +
@@ -847,7 +846,7 @@ list.$factory = function(){
     var res = [],
         pos = 0,
         arg = $B.$iter(obj),
-        next_func = $B.$call(getattr(arg, "__next__"))
+        next_func = $B.$call($B.$getattr(arg, "__next__"))
 
     while(1){
         try{
@@ -1002,7 +1001,7 @@ tuple.__new__ = function(cls, ...args){
     self.__brython__ = true
     self.__dict__ = $B.empty_dict()
     var arg = $B.$iter(args[0]),
-        next_func = $B.$call(getattr(arg, "__next__"))
+        next_func = $B.$call($B.$getattr(arg, "__next__"))
     while(1){
         try{
             var item = next_func()

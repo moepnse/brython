@@ -79,9 +79,6 @@ $B.__ARGV = []
 // script name and its source code
 $B.webworkers = {}
 
-// Mapping between a module name and its path (url)
-$B.$py_module_path = {}
-
 // File cache, indexed by module names
 $B.file_cache = {}
 
@@ -107,7 +104,9 @@ $B.precompiled = {}
 $B.frames_stack = []
 
 // Python __builtins__
-$B.builtins = {}
+// Set to Object.create(null) instead of {}
+// to avoid conflicts with JS attributes such as "constructor"
+$B.builtins = Object.create(null)
 
 $B.builtins_scope = {id:'__builtins__', module:'__builtins__', binding: {}}
 
@@ -120,8 +119,9 @@ $B.builtin_classes = []
 $B.__getattr__ = function(attr){return this[attr]}
 $B.__setattr__ = function(attr, value){
     // limited to some attributes
-    if(['debug', 'stdout', 'stderr'].indexOf(attr) > -1){$B[attr] = value}
-    else{
+    if(['debug', 'stdout', 'stderr'].indexOf(attr) > -1){
+        $B[attr] = value
+    }else{
         throw $B.builtins.AttributeError.$factory(
             '__BRYTHON__ object has no attribute ' + attr)
     }
@@ -132,6 +132,7 @@ $B.__setattr__ = function(attr, value){
 $B.language = _window.navigator.userLanguage || _window.navigator.language
 
 $B.locale = "C" // can be reset by locale.setlocale
+$B.PyCF_ONLY_AST = 1024 // compiler flag, used in libs/_ast.js
 
 if($B.isWebWorker){
     $B.charset = "utf-8"
@@ -146,6 +147,18 @@ $B.min_int = -$B.max_int
 
 $B.max_float = new Number(Number.MAX_VALUE)
 $B.min_float = new Number(Number.MIN_VALUE)
+
+// special repr() for some codepoints, used in py_string.js and py_bytes.js
+$B.special_string_repr = {
+    8: "\\x08",
+    9: "\\t",
+    10: "\\n",
+    11: "\\x0b",
+    12: "\\x0c",
+    13: "\\r",
+    92: "\\\\",
+    160: "\\xa0"
+}
 
 // Used to compute the hash value of some objects (see
 // py_builtin_functions.js)
@@ -258,8 +271,14 @@ $B.add_files = function(files){
     }
 }
 
+$B.has_file = function(file){
+    // Used to check if a file was added to $B.files
+    return ($B.files && $B.files.hasOwnProperty(file))
+}
+
 // Can be used in Javascript programs to run Python code
 $B.python_to_js = function(src, script_id){
+    $B.parse_options()
     $B.meta_path = $B.$meta_path.slice()
     if(!$B.use_VFS){$B.meta_path.shift()}
     if(script_id === undefined){script_id = "__main__"}

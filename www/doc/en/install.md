@@ -10,15 +10,15 @@ Brython scripts from a CDN:
 </script>
 ```
 
-The minor version can be specified with `brython@3.9` and the micro version
-with `brython@3.9.5`.
+The minor version can be specified with `brython@3.10` and the micro version
+with `brython@3.10.3`.
 
 Brython is also available with cdnjs:
 
 ```xml
-<script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.9.5/brython.min.js">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.10.3/brython.min.js">
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.9.5/brython_stdlib.min.js">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.10.3/brython_stdlib.min.js">
 </script>
 ```
 
@@ -108,6 +108,10 @@ Other commands
 
 > generates a "Brython package", allowing to distribute a module or a package
 > in a very straightforward way. See section [Packages Brython](brython-packages.html)
+
+`-- version`
+
+> prints the Brython version
 
 Web server
 ----------

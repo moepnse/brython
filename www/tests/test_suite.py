@@ -765,4 +765,18 @@ assert f()
 x = 2
 assert not f()
 
+# issue 1802
+assertRaises(SyntaxError, exec, ".x = 4")
+
+# issue 1803
+assertRaises(SyntaxError, exec, "050")
+
+# issue 1807
+assertRaises(SyntaxError, exec, '-')
+
+# issue 1819
+assert eval("-5 - 8") == -13
+
+assert [0 < a < 2 for a in (0, 1)] == [False, True]
+
 print('passed all tests...')

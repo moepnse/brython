@@ -961,10 +961,12 @@ str.__mro__ = [_b_.object]
 str.__mul__ = function(){
     var $ = $B.args("__mul__", 2, {self: null, other: null},
         ["self", "other"], arguments, {}, null, null)
-    if(! _b_.isinstance($.other, _b_.int)){throw _b_.TypeError.$factory(
+    if(! _b_.isinstance($.other, _b_.int)){
+        throw _b_.TypeError.$factory(
         "Can't multiply sequence by non-int of type '" +
-            $B.class_name($.other) + "'")}
-    return $.self.valueOf().repeat($.other)
+            $B.class_name($.other) + "'")
+    }
+    return $.self.valueOf().repeat($.other < 0 ? 0 : $.other)
 }
 
 str.__ne__ = function(self, other){
@@ -990,16 +992,8 @@ str.__reduce_ex__ = function(self){
 
 str.__repr__ = function(self){
     // special cases
-    var t = {
-        8: "\\x08",
-        9: "\\t",
-        10: "\\n",
-        11: "\\x0b",
-        12: "\\x0c",
-        13: "\\r",
-        92: "\\\\"
-    }
-    var repl = '',
+    var t = $B.special_string_repr, // in brython_builtins.js
+        repl = '',
         chars = to_chars(self)
     for(var i = 0; i < chars.length; i++){
         var cp = _b_.ord(chars[i])
@@ -1301,7 +1295,7 @@ str.find = function(){
             arguments, {start: 0, end: null}, null, null)
     check_str($.sub)
     normalize_start_end($)
-    
+
     var len = str.__len__($.self),
         sub_len = str.__len__($.sub)
 
@@ -1999,13 +1993,13 @@ str.replace = function(self, old, _new, count) {
     // the number of times to replace. In CPython, negative or undefined
     // values of count means replace all.
     var $ = $B.args("replace", 4,
-        {self: null, old: null, $$new: null, count: null},
-        ["self", "old", "$$new", "count"],
+        {self: null, old: null, new: null, count: null},
+        ["self", "old", "new", "count"],
         arguments, {count: -1}, null, null),
         count = $.count,
         self = $.self,
         old = $.old,
-        _new = $.$$new
+        _new = $.new
     // Validate type of old
     check_str(old, "replace() argument 1 ")
     check_str(_new, "replace() argument 2 ")
@@ -2465,7 +2459,7 @@ str.$factory = function(arg, encoding, errors){
         if(method === null ||
                 // if not better than object.__str__, try __repr__
                 (arg.__class__ && arg.__class__ !== _b_.object &&
-                method.$infos && method.$infos.__func__ === _b_.object.__str__)){
+                method === _b_.object.__str__)){
             var method = $B.$getattr(klass, "__repr__")
         }
     }
@@ -2665,8 +2659,9 @@ $B.format_width = function(s, fmt){
     return s
 }
 
-function fstring_expression(){
+function fstring_expression(start){
     this.type = "expression"
+    this.start = start
     this.expression = ""
     this.conversion = null
     this.fmt = null
@@ -2752,7 +2747,6 @@ $B.parse_fstring = function(string){
             while(string.charAt(i) == " "){i++}
             if(string.charAt(i) == "}"){
                 // end of debug expression
-                console.log('end of debug', current)
                 elts.push(current)
                 ctype = null
                 current = ""
@@ -2764,7 +2758,7 @@ $B.parse_fstring = function(string){
             var i = pos,
                 nb_braces = 1,
                 nb_paren = 0,
-                current = new fstring_expression()
+                current = new fstring_expression(expr_start)
             while(i < string.length){
                 car = string.charAt(i)
                 if(car == "{" && nb_paren == 0){
@@ -2775,9 +2769,6 @@ $B.parse_fstring = function(string){
                     nb_braces -= 1
                     if(nb_braces == 0){
                         // end of expression
-                        if(current.fmt){
-                            current.format = string.substring(fmt_start, i)
-                        }
                         if(current.expression == ""){
                             fstring_error("f-string: empty expression not allowed",
                                 pos)
@@ -2806,11 +2797,11 @@ $B.parse_fstring = function(string){
                         current.conversion = string.charAt(i + 1)
                         i += 2
                     }
-                }else if(car == "("){
+                }else if(car == "(" || car == '['){
                     nb_paren++
                     current.expression += car
                     i++
-                }else if(car == ")"){
+                }else if(car == ")" || car == ']'){
                     nb_paren--
                     current.expression += car
                     i++
@@ -2836,10 +2827,34 @@ $B.parse_fstring = function(string){
                         }
                     }
                 }else if(nb_paren == 0 && car == ":"){
+                    // start format
                     current.fmt = true
-                    var fmt_start = i
-                    current.expression += car
-                    i++
+                    var cb = 0,
+                        fmt_complete = false
+                    for(var j = i + 1; j < string.length; j++){
+                        if(string[j] == '{'){
+                            if(string[j + 1] == '{'){
+                                j += 2
+                            }else{
+                                cb++
+                            }
+                        }else if(string[j] == '}'){
+                            if(string[j + 1] == '}'){
+                                j += 2
+                            }else if(cb == 0){
+                                fmt_complete = true
+                                var fmt = string.substring(i + 1, j)
+                                current.format = $B.parse_fstring(fmt)
+                                i = j
+                                break
+                            }else{
+                                cb--
+                            }
+                        }
+                    }
+                    if(! fmt_complete){
+                        fstring_error('invalid format', pos)
+                    }
                 }else if(car == "="){
                     // might be a "debug expression", eg f"{x=}"
                     var ce = current.expression,

@@ -121,7 +121,7 @@ Flag.__or__ = function(self, other){
 }
 
 Flag.__ror__ = function(self, other){
-    if(typeof other == "number" || _b_.isinstance(other, int)){
+    if(typeof other == "number" || _b_.isinstance(other, _b_.int)){
         if(other == 0){
             return Flag.$factory(self.value)
         }
@@ -256,7 +256,7 @@ BPattern.__repr__ = BPattern.__str__ = function(self){
 }
 
 BPattern.findall = function(self){
-    var iter = BPattern.finditer.apply(null, arguments),
+    var iter = BPattern.finditer.apply(null, arguments).js_gen,
         res = []
 
     while(true){
@@ -883,7 +883,8 @@ function CharacterClass(pos, cp, length, groups){
         case 'S':
             this.test_func = function(string, pos){
                 var cp = string.codepoints[pos]
-                return $B.unicode_tables.Zs[cp] === undefined &&
+                return cp !== undefined &&
+                    $B.unicode_tables.Zs[cp] === undefined &&
                     $B.unicode_bidi_whitespace.indexOf(cp) == -1
             }
             break
@@ -1314,14 +1315,14 @@ StringEnd.prototype.toString = function(){
     return '$<end>'
 }
 
-function validate(name){
+function validate(name, pos){
     // name is a StringObj
     sname = name.string
     name = name.codepoints
     if(name.length == 0){
-        fail("missing group name")
+        fail("missing group name", pos)
     }else if(chr(name[0]).match(/\d/) || name.indexOf(ord('.')) > - 1){
-        fail(`bad character in group name '${sname}'`)
+        fail(`bad character in group name '${sname}'`, pos)
     }
 
     var $B = window.__BRYTHON__,
@@ -1338,10 +1339,10 @@ function validate(name){
         }
         if(pos != name.length){
             console.log("bad character", pos, name)
-            fail(`bad character in group name '${sname}'`)
+            fail(`bad character in group name '${sname}'`, pos)
         }
     }else{
-        fail(`bad character in group name '${sname}'`)
+        fail(`bad character in group name '${sname}'`, pos)
     }
 }
 
@@ -1393,7 +1394,7 @@ function escaped_char(args){
         if(i == cps.length){
             fail("missing }, unterminated name", pos)
         }
-        var cp = validate_named_char(from_codepoint_list(description))
+        var cp = validate_named_char(from_codepoint_list(description), pos)
         return {
             type: 'N',
             ord: cp,
@@ -1438,7 +1439,7 @@ function escaped_char(args){
         if(mo && mo[0].length == 8){
             var cp = eval("0x" + mo[0])
             if(cp > 0x10FFFF){
-                fail(`bad escape \\U${mo[0]}`)
+                fail(`bad escape \\U${mo[0]}`, pos)
             }
             return {
                 type: 'U',
@@ -1550,11 +1551,12 @@ function parse_character_set(text, pos, is_bytes){
                     is_bytes
                 })
             if(typeof escape == "number"){
+                var s = chr(escape)
                 escape = {
                     ord: escape,
                     length: 2,
                     toString: function(){
-                        return chr(escape)
+                        return s
                     }
                 }
             }
@@ -1648,11 +1650,11 @@ function open_unicode_db(){
     }
 }
 
-function validate_named_char(description){
+function validate_named_char(description, pos){
     // validate that \N{<description>} is in the Unicode db
     // Load unicode table if not already loaded
     if(description.length == 0){
-        fail("missing character name")
+        fail("missing character name", pos)
     }
     open_unicode_db()
     if($B.unicodedb !== undefined){
@@ -1660,11 +1662,11 @@ function validate_named_char(description){
             description.toUpperCase() + ";.*$", "m")
         search = re.exec($B.unicodedb)
         if(search === null){
-            fail(`undefined character name '${description}'`)
+            fail(`undefined character name '${description}'`, pos)
         }
         return eval("0x" + search[1])
     }else{
-        fail("could not load unicode.txt")
+        fail("could not load unicode.txt", pos)
     }
 }
 
@@ -1734,7 +1736,7 @@ function compile(pattern, flags){
                 group_num--
             }else if(item.type == "name_def"){
                 var value = item.value
-                validate(value)
+                validate(value, pos)
                 if(groups[value.string] !== undefined){
                     fail(`redefinition of group name` +
                         ` '${value.string}' as group ${group_num}; was group` +
@@ -2173,7 +2175,7 @@ function* tokenize(pattern, type, _verbose){
                             i++
                         }
                         name = StringObj.from_codepoints(name)
-                        validate(name)
+                        validate(name, pos)
                         if(i == pattern.length){
                             fail("missing >, unterminated name", pos)
                         }
@@ -2192,7 +2194,7 @@ function* tokenize(pattern, type, _verbose){
                             i++
                         }
                         name = StringObj.from_codepoints(name)
-                        validate(name)
+                        validate(name, pos)
                         if(i == pattern.length){
                             fail("missing ), unterminated name", pos)
                         }
@@ -2218,7 +2220,7 @@ function* tokenize(pattern, type, _verbose){
                     if(sref.string.match(/^\d+$/)){
                         ref = parseInt(sref.string)
                     }else{
-                        validate(sref)
+                        validate(sref, pos)
                         ref = sref.string
                     }
                     if(i == pattern.length){
@@ -2839,7 +2841,7 @@ function subn(pattern, repl, string, count, flags){
         repl1 = data1.repl1
     }
     pos = 0
-    for(var bmo of $module.finditer(BPattern.$factory(pattern), string.to_str())){
+    for(var bmo of $module.finditer(BPattern.$factory(pattern), string.to_str()).js_gen){
         // finditer yields instances of BMatchObject
         var mo = bmo.mo // instance of MatchObject
         res += from_codepoint_list(string.codepoints.slice(pos, mo.start),
@@ -2894,6 +2896,14 @@ function* iterator(pattern, string, flags, original_string, pos, endpos){
             pos++
         }
     }
+    // does the pattern match the empty string ?
+    /*
+    var mo = match(pattern, new StringObj(''), 0, 0)
+    if(mo){
+        mo.start = mo.end = string.length
+        yield BMO.$factory(mo)
+    }
+    */
     delete original_string.in_iteration
 }
 
@@ -2957,7 +2967,7 @@ GroupMO.prototype.backtrack = function(string, groups){
             nb0 = mos.length
         while(mos.length > 0){
             var mo = mos.pop()
-            if(mo.backtrack()){
+            if(mo.backtrack(string, groups)){
                 mos.push(mo)
                 if(this.node.num !== undefined){
                     groups[this.node.num].end = mo.end
@@ -3081,7 +3091,7 @@ BMO.group = function(self){
     var groupobj = self.mo.$groups,
         result = []
     for(var group_id of args){
-        if(group_id == 0){
+        if($B.rich_comp('__eq__', group_id, 0)){
             result.push(self.mo.string.substring(self.mo.start, self.mo.end))
             continue
         }
@@ -3519,7 +3529,7 @@ var $module = {
             }
         }
 
-        var iter = $module.finditer.apply(null, arguments),
+        var iter = $module.finditer.apply(null, arguments).js_gen,
             res = []
         while(true){
             var next = iter.next()
@@ -3670,7 +3680,7 @@ var $module = {
         }else{
             data = {pattern, string}
         }
-        for(var bmo of $module.finditer(pattern, $.string)){
+        for(var bmo of $module.finditer(pattern, $.string).js_gen){
             var mo = bmo.mo, // finditer returns instances of BMO
                 groupobj = mo.$groups
             res.push(data.string.substring(pos, mo.start))

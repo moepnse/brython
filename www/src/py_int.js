@@ -184,7 +184,7 @@ int.__eq__ = function(self, other){
         return self.valueOf() == other.valueOf()
     }
     if(_b_.isinstance(other, _b_.complex)){
-        if(other.$imag != 0){return False}
+        if(other.$imag != 0){return _b_.False}
         return self.valueOf() == other.$real
     }
     return _b_.NotImplemented
@@ -398,62 +398,62 @@ int.__pow__ = function(self, other, z){
                 return int.$factory(1)
             case 1:
                 return int.$factory(self.valueOf())
-      }
-      if(z !== undefined && z !== _b_.None){
-          // If z is provided, the algorithm is faster than computing
-          // self ** other then applying the modulo z
-          if(z == 1){return 0}
-          var result = 1,
-              base = self % z,
-              exponent = other,
-              long_int = $B.long_int
-          if(exponent < 0){
-              var gcd, inv, _
-              [gcd, inv, _] = extended_euclidean(self, z)
-              if(gcd !== 1){
-                  throw _b_.ValueError.$factory("not relative primes: " +
-                      self + ' and ' + z)
-              }
-              return int.__pow__(inv, -exponent, z)
-          }
-          while(exponent > 0){
-              if(exponent % 2 == 1){
-                  if(result * base > $B.max_int){
-                      result = long_int.__mul__(
-                          long_int.$factory(result),
-                          long_int.$factory(base))
-                      result = long_int.__mod__(result, z)
-                  }else{
-                     result = (result * base) % z
-                  }
-              }
-              exponent = exponent >> 1
-              if(base * base > $B.max_int){
-                  base = long_int.__mul__(long_int.$factory(base),
-                      long_int.$factory(base))
-                  base = long_int.__mod__(base, z)
-              }else{
-                  base = (base * base) % z
-              }
-          }
-          return result
-      }
-      var res = Math.pow(self.valueOf(), other.valueOf())
-      if(res > $B.min_int && res < $B.max_int){
-          return other > 0 ? res : new Number(res)
-      }else if(res !== Infinity && !isFinite(res)){
-          return res
-      }else{
-          if($B.BigInt){
-              return {
-                  __class__: $B.long_int,
-                  value: ($B.BigInt(self) ** $B.BigInt(other)).toString(),
-                  pos: true
-              }
-          }
-          return $B.long_int.__pow__($B.long_int.$from_int(self),
-             $B.long_int.$from_int(other))
-      }
+        }
+        if(z !== undefined && z !== _b_.None){
+            // If z is provided, the algorithm is faster than computing
+            // self ** other then applying the modulo z
+            if(z == 1){return 0}
+            var result = 1,
+                base = self % z,
+                exponent = other,
+                long_int = $B.long_int
+            if(exponent < 0){
+                var gcd, inv, _
+                [gcd, inv, _] = extended_euclidean(self, z)
+                if(gcd !== 1){
+                    throw _b_.ValueError.$factory("not relative primes: " +
+                        self + ' and ' + z)
+                }
+                return int.__pow__(inv, -exponent, z)
+            }
+            while(exponent > 0){
+                if(exponent % 2 == 1){
+                    if(result * base > $B.max_int){
+                        result = long_int.__mul__(
+                            long_int.$factory(result),
+                            long_int.$factory(base))
+                        result = long_int.__mod__(result, z)
+                    }else{
+                       result = (result * base) % z
+                    }
+                }
+                exponent = exponent >> 1
+                if(base * base > $B.max_int){
+                    base = long_int.__mul__(long_int.$factory(base),
+                        long_int.$factory(base))
+                    base = long_int.__mod__(base, z)
+                }else{
+                    base = (base * base) % z
+                }
+            }
+            return result
+        }
+        var res = Math.pow(self.valueOf(), other.valueOf())
+        if(res > $B.min_int && res < $B.max_int){
+            return other > 0 ? res : new Number(res)
+        }else if(res !== Infinity && !isFinite(res)){
+            return res
+        }else{
+            if($B.BigInt){
+                return {
+                    __class__: $B.long_int,
+                    value: ($B.BigInt(self) ** $B.BigInt(other)).toString(),
+                    pos: true
+                }
+            }
+            return $B.long_int.__pow__($B.long_int.$from_int(self),
+               $B.long_int.$from_int(other))
+        }
     }
     if(_b_.isinstance(other, _b_.float)) {
         other = _b_.float.numerator(other)
@@ -513,10 +513,11 @@ int.__setattr__ = function(self, attr, value){
     if(typeof self == "number" || typeof self == "boolean"){
         var cl_name = $B.class_name(self)
         if(_b_.dir(self).indexOf(attr) > -1){
-            var msg = "attribute '" + attr + `' of '${cl_name}'` +
-                "objects is not writable"
+            throw _b_.AttributeError.$factory("attribute '" + attr +
+                `' of '${cl_name}' objects is not writable`)
         }else{
-            var msg = `'${cl_name}' object has no attribute '${attr}'`
+            throw _b_.AttributeError.$factory(`'${cl_name}' object` +
+                ` has no attribute '${attr}'`)
         }
         throw _b_.AttributeError.$factory(msg)
     }
