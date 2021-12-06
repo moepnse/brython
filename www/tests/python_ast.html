@@ -81,29 +81,35 @@ zone = document["zone"]
 zone2 = document["zone2"]
 
 def show_cpython(req):
-  zone2.text = req.text.replace('\r\n', '\n').rstrip()
-  print(zone2.text == zone.text)
-  ls1, ls2 = 0, 0
-  for i, (c1, c2) in enumerate(zip(zone.text, zone2.text)):
-    if c1 == '\n':
-        ls1 = i
-    if c2 == '\n':
-        ls2 = i
-    if c1 != c2:
-        print(zone.text[ls1:zone.text.find('\n', ls1 + 1)])
-        print(zone2.text[ls2:zone2.text.find('\n', ls2 + 1)])
-        print('at pos', i, 'c1', c1, ord(c1), '!=', c2, ord(c2))
-        break
+  cpython_dump = req.text.replace('\r\n', '\n').rstrip()
+  brython_dump = dumps['Brython']
+  if cpython_dump != brython_dump:
+      zone.text = brython_dump
+      zone2.text = cpython_dump
+      ls1, ls2 = 0, 0
+      for i, (c1, c2) in enumerate(zip(brython_dump, cpython_dump)):
+        if c1 == '\n':
+            ls1 = i
+        if c2 == '\n':
+            ls2 = i
+        if c1 != c2:
+            print(cpython_dump[ls1:cpython_dump.find('\n', ls1 + 1)])
+            print(brython_dump[ls2:brython_dump.find('\n', ls2 + 1)])
+            print('at pos', i, 'c1', c1, ord(c1), '!=', c2, ord(c2))
+            break
+  else:
+    print(True)
+dumps = {}
 
 @bind('#parse', 'click')
 def parse(ev):
     # Brython parse
     src = source.value
     dump = ast.dump(ast.parse(src), indent=4)
-    zone.text = dump.replace('\r\n', '\n')
+    dumps['Brython'] = dump.replace('\r\n', '\n')
     # CPython
-    req = ajax.post("/cgi-bin/dump_ast.py",
-      headers={"Content-Type": "application/json"},
+    req = ajax.post("/dump_ast",
+      headers={"Content-Type": "text/plain,charset=utf-8"},
       data=json.dumps({'py_source': src}),
       oncomplete=show_cpython
     )
