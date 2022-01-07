@@ -169,7 +169,7 @@ if($B.ast_classes){
         return body
     }
 
-    function ast_dump(tree, indent){
+    var ast_dump = $B.ast_dump = function(tree, indent){
         indent = indent || 0
         if(tree === _b_.None){
             // happens in dictionary keys for **kw
@@ -246,6 +246,7 @@ if($B.ast_classes){
         res  += ')'
         return res
     }
+
 }
 
 function ast_or_obj(obj){
@@ -946,7 +947,8 @@ $AbstractExprCtx.prototype.transition = function(token, value){
 
     switch(token) {
         case 'await':
-            return new $AbstractExprCtx(new $AwaitCtx(context), true)
+            return new $AbstractExprCtx(new $AwaitCtx(
+                new $ExprCtx(context, 'await', false)), true)
         case 'id':
             return new $IdCtx(new $ExprCtx(context, 'id', commas),
                 value)
@@ -1395,6 +1397,7 @@ $AssignCtx.prototype.transition = function(token, value){
         context.guess_type()
         return $transition(context.parent, 'eol')
     }
+    console.log('token', token, 'after context', context)
     $_SyntaxError(context, 'token ' + token + ' after ' + context)
 }
 
@@ -1976,18 +1979,7 @@ $AwaitCtx.prototype.transition = function(token, value){
 }
 
 $AwaitCtx.prototype.to_js = function(){
-    // Save execution stack before awaiting.
-    // If the promise is rejected, restore it before throwing the
-    // exception.
-    // cf. issue #1701
-    /*
-    return 'var save_stack = $B.save_stack();' +
-        'try{await ($B.promise(' + $to_js(this.tree) + '))}' +
-        'catch(err){$B.restore_stack(save_stack, $locals);throw err};' +
-        '$B.restore_stack(save_stack, $locals); '
-    */
     return `await $B.promise(${$to_js(this.tree)})`
-
 }
 
 var $BodyCtx = $B.parser.$BodyCtx = function(context){
@@ -2841,7 +2833,8 @@ var Comprehension = {
             co_kwonlyargcount: 0,
             co_posonlyargount: 0,
             co_varnames: $B.fast_tuple(['.0', ${varnames}])
-        }\n`
+        }
+        $locals['.0'] = expr\n`
     },
     generators: function(comp){
         // Return a list of comprehensions
@@ -3404,6 +3397,8 @@ $DefCtx.prototype.transition = function(token, value){
             }
             context.has_args = true;
             return new $FuncArgs(context)
+        case ')':
+            return context
         case 'annotation':
             return new $AbstractExprCtx(new $AnnotationCtx(context), true)
         case ':':
@@ -5302,11 +5297,19 @@ function tg_to_js(target, iterable, unpack){
     }else{
         var new_id = $B.UUID(),
             nb_targets = target.items.length,
-            has_starred = !! $B.last(target.items).starred
+            has_starred = false,
+            nb_after_starred
+        for(var i = 0, len = target.items.length; i < len; i++){
+            if(target.items[i].starred){
+                has_starred = true
+                nb_after_starred = len - i - 1
+                break
+            }
+        }
         var nxt = unpack ? `${iterable}.read_one()` : iterable
 
         var js = `try{\n var $next_${new_id} = $B.unpacker(${nxt}, ` +
-                 `${nb_targets}, ${has_starred})\n}` +
+                 `${nb_targets}, ${has_starred}, ${nb_after_starred})\n}` +
                  `catch(err){\n console.log("erreur");$B.leave_frame($locals); throw err\n}\n`
         for(var item of target.items){
             js += tg_to_js(item, `$next_${new_id}`, true)
@@ -5486,6 +5489,10 @@ $FromCtx.prototype.transition = function(token, value){
               return context
           }
         case 'import':
+            if(context.names.length > 0){ // issue 1850
+                $_SyntaxError(context,
+                    ["only one 'import' allowed after 'from'"])
+            }
             if(context.expect == 'module'){
                 context.expect = 'id'
                 return context
@@ -5764,7 +5771,7 @@ $FuncArgs.prototype.transition = function(token, value){
                     }
                 }
             }
-            return context.parent
+            return $transition(context.parent, token, value)
         case 'op':
             if(context.has_kw_arg){
                 $_SyntaxError(context, 'duplicate keyword argument')
@@ -6011,7 +6018,7 @@ GeneratorExpCtx.prototype.to_js = function(){
 
     var id = this.id,
         expr = this.tree[0],
-        first_for = this.tree[1]
+        first_for = this.tree[1],
         outmost_expr = first_for.tree[1].to_js()
     first_for.comp_body = true
     first_for.iterable_is_outermost = true
@@ -6422,10 +6429,16 @@ $IdCtx.prototype.boundBefore = function(scope){
 
     var node = $get_node(this),
         found = false
-    var $test = false // this.value == "a"
+    var $test = false // this.value == "wxc"
     if($test){
         console.log(this.value, "bound before")
         console.log("node", node)
+        console.log('scope', scope)
+    }
+
+    if((scope.ntype == "def" || scope.ntype == "generator") &&
+            scope.context.tree[0].args.indexOf(this.value) > -1){
+        return true
     }
 
     while(!found && node.parent){
@@ -7100,7 +7113,7 @@ var JoinedStrCtx = $B.parser.JoinedStrCtx = function(context, values){
             root.binding = $B.clone(this.scope.binding)
 
             try{
-                dispatch_tokens(root, src)
+                dispatch_tokens(root, src.trimStart())
             }catch(err){
                 err.args[1][1] += line_num - 1
                 var line_start = save_pos,
@@ -7441,13 +7454,6 @@ ListCompCtx.prototype.to_js = function(){
     var js = `(${this.has_await ? 'async ' : ''}function(expr){` +
         Comprehension.admin_infos(this) +
         `var $result_${id} = []\n`
-        /*
-        var $locals_${id} = {},
-            $locals = $locals_${id}
-        $locals.$line_info = '${node.line_num},${node.module}'
-        var $top_frame = ["${id}", $locals_${id}, "${this.module}", $locals_${this.module_ref}]
-        $locals.$f_trace = $B.enter_frame($top_frame)
-        */
 
     js += first_for.to_js(indent)
     var nb = -1
@@ -8735,7 +8741,7 @@ $OpCtx.prototype.to_js = function(){
                             ' == "string" && typeof ' + t1 +
                             ' == "string") ? ' + t0 + '+' + t1)
                     }
-                    res.push(': $B.rich_op("' + $operators[this.op] + '",' +
+                    res.push(`: $B.rich_op("__${$operators[this.op]}__",` +
                         t0 + ',' + t1 + ')')
                     return '(' + res.join('') + ')'
                 }
@@ -8744,7 +8750,7 @@ $OpCtx.prototype.to_js = function(){
                 return '$B.rich_comp("__' + $operators[this.op] + '__",' +
                     e0.to_js() + ',' + e1.to_js() + ')'
             }else{
-                return '$B.rich_op("' + $operators[this.op] + '", ' +
+                return `$B.rich_op("__${$operators[this.op]}__", ` +
                     e0.to_js() + ', ' + e1.to_js() + ')'
             }
         default:
@@ -8752,7 +8758,7 @@ $OpCtx.prototype.to_js = function(){
                 return '$B.rich_comp("__' + $operators[this.op] + '__",' +
                     this.tree[0].to_js() + ',' + this.tree[1].to_js() + ')'
             }else{
-                return '$B.rich_op("' + $operators[this.op] + '", ' +
+                return `$B.rich_op("__${$operators[this.op]}__", ` +
                     this.tree[0].to_js() + ', ' + this.tree[1].to_js() +
                     ')'
             }
@@ -12875,9 +12881,16 @@ $B.py2js = function(src, module, locals_id, parent_scope, line_num){
 
     dispatch_tokens(root, src)
     if($B.produce_ast){
-        var ast = ast_dump(root.ast())
+        var _ast = root.ast()
         if($B.produce_ast == 2){
-            console.log(ast)
+            console.log(ast_dump(_ast))
+        }
+        if($B.js_from_ast){
+            var js_from_ast = $B.js_from_root(_ast, locals_id)
+            console.log($B.format_indent(js_from_ast, 0))
+            if(locals_id == 'js_from_ast'){
+                return {to_js: function(){return js_from_ast}}
+            }
         }
     }
     if(ix != undefined){
@@ -13125,9 +13138,45 @@ $B.parse_options = function(options){
     }
 }
 
+// Reserved for future use : execute Python scripts as soon as they are
+// inserted in the page, instead of waiting for page load.
+// options are passed as attributes of the <script> tag, eg
+// <script type="text/python" debug=2>
+if(! $B.isWebWorker){
+    var observer = new MutationObserver(function(mutations){
+      for (var i=0; i < mutations.length; i++){
+        for (var j=0; j < mutations[i].addedNodes.length; j++){
+          checkPythonScripts(mutations[i].addedNodes[j]);
+        }
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+}
+
+function checkPythonScripts(addedNode) {
+   if(addedNode.tagName == 'SCRIPT' && addedNode.type == "text/python"){
+       var options = {}
+       for(var attr of addedNode.attributes){
+           if(attr.nodeName == "type"){
+               continue
+           }else if(attr.nodeName == 'debug'){
+               options[attr.nodeName] = parseInt(attr.nodeValue)
+           }else{
+               options[attr.nodeName]  = attr.nodeValue
+           }
+       }
+       // process script here...
+   }
+}
+
 var brython = $B.parser.brython = function(options){
     $B.parse_options(options)
     if(!($B.isWebWorker || $B.isNode)){
+        observer.disconnect()
         _run_scripts(options)
     }
 }
