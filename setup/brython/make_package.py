@@ -98,7 +98,7 @@ def make(package_name, package_path, exclude_dirs=None, output_path=None):
             else:
                 imports = []
             if is_package:
-               VFS[mod_name] = [ext, data, imports, 1]
+                VFS[mod_name] = [ext, data, imports, 1]
             else:
                 VFS[mod_name] = [ext, data, imports]
 
